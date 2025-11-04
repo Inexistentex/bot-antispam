@@ -200,7 +200,10 @@ async def lifespan(app: FastAPI):
     # Definir o webhook
     webhook_endpoint = f"{WEBHOOK_URL}/webhook"
     logger.info(f"Definindo webhook para: {webhook_endpoint}")
-    await application.bot.set_webhook(url=webhook_endpoint)
+    await application.bot.set_webhook(
+        url=webhook_endpoint,
+        allowed_updates=["message", "chat_member", "callback_query"]
+    )
     
     logger.info("--- Servidor do Bot iniciado e pronto ---")
     yield # Isso é o ponto em que o servidor fica rodando
