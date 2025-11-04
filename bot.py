@@ -18,7 +18,7 @@ from telegram.constants import ParseMode
 
 # --- Configuração Inicial ---
 # (Carregue estas variáveis de ambiente no seu servidor)
-TOKEN = os.getenv("8256757914:AAEs2VTl9SgYVpZHy2OwNmeUs4S2RwiRIkc")
+TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Ex: "https://meu-servidor.com"
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "impedirei") # Seu @ de suporte
 
