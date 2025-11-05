@@ -83,7 +83,7 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
        return
 
     user = update.chat_member.new_chat_member.user
-    chat = update.chat
+    chat = update.chat_member.chat
     bot = context.bot
     logger.info(f"Novo membro {user.first_name} ({user.id}) no chat {chat.id}")
 
