@@ -5,7 +5,7 @@ import regex  # Usamos 'regex' em vez de 're' para suportar \p{L}
 import uvicorn
 import asyncio
 from fastapi import FastAPI, Request
-from contextlib import asynccontextmanager # Necessário para o novo gerenciamento
+from contextlib import asynccontextmanager 
 
 from telegram import (
     Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, 
@@ -26,7 +26,9 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "impedirei")
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-logger = logging.getLogger(__name__)
+# Alteramos o nome do logger para 'bot' para corresponder ao Start Command
+logger = logging.getLogger("bot")
+logger.setLevel(logging.INFO)
 
 
 # --- Função de Verificação (Sua lógica personalizada) ---
@@ -41,7 +43,7 @@ async def check_user_profile(user_id: int, chat_id: int, bot: Bot) -> (bool, str
         chat_member = await bot.get_chat_member(chat_id, user_id)
         user = chat_member.user
 
-        # 2. Verificar Foto de Perfil (MODIFICADO POR VOCÊ)
+        # 2. Verificar Foto de Perfil
         profile_photos = await bot.get_user_profile_photos(user_id, limit=1)
         if profile_photos.total_count == 0:
             reasons.append("sem foto de perfil (ou com ela privada)") # SUA MODIFICAÇÃO
@@ -70,8 +72,12 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Disparado quando um novo membro entra no chat.
     """
+    # IMPORTANTE: Adicionamos um log aqui
+    logger.info(f"HANDLE_NEW_MEMBER ATIVADO para usuário: {update.chat_member.new_chat_member.user.id}")
+    
     if not (update.chat_member and 
             update.chat_member.new_chat_member.status == ChatMember.MEMBER):
+        logger.warn("Evento de chat_member não era um novo membro 'MEMBER'. Ignorando.")
         return
 
     user = update.chat_member.new_chat_member.user
@@ -88,8 +94,8 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- Se o perfil for INVÁLIDO ---
     logger.info(f"Usuário {user.id} REPROVADO: {reason_text}. Mutando.")
     
-    # 1. Calcular o tempo de mute (MODIFICADO POR VOCÊ)
-    until_date = int(time.time()) + 9999999 # SUA MODIFICAÇÃO (Mute longo)
+    # 1. Calcular o tempo de mute (SUA MODIFICAÇÃO)
+    until_date = int(time.time()) + 9999999 
     
     # 2. Definir as permissões de MUTE
     permissions = ChatPermissions(
@@ -115,7 +121,7 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # 5. Montar e enviar a mensagem de aviso (MODIFICADO POR VOCÊ)
+    # 5. Montar e enviar a mensagem de aviso
     text = (
         f"Olá, <a href='tg://user?id={user.id}'>{user.first_name}</a>! Seja bem-vindo(a).\n\n"
         f"Detectamos que seu perfil está incompleto ({reason_text}).\n\n"
@@ -133,11 +139,13 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
     """
     Disparado quando o usuário clica em "verify_profile".
     """
+    # IMPORTANTE: Adicionamos um log aqui
+    logger.info(f"HANDLE_BUTTON_CLICK ATIVADO por: {update.callback_query.from_user.id}")
+
     query = update.callback_query
     user = query.from_user 
     chat_id = query.message.chat.id
     bot = context.bot
-    logger.info(f"Usuário {user.id} clicou no botão de verificação.")
 
     is_valid, reason = await check_user_profile(user.id, chat_id, bot)
 
@@ -150,7 +158,7 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
             can_invite_users=True,
         )
         await bot.restrict_chat_member(
-            chat_id=chat_id, user_id=user.id, permissions=permissions
+            chat_id=chat.id, user_id=user.id, permissions=permissions
         )
         await query.answer(
             "✅ Perfil verificado! Seu acesso foi liberado.", 
@@ -163,7 +171,6 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         # --- REPROVADO ---
         logger.info(f"Usuário {user.id} falhou na RE-verificação: {reason}")
-        # 2. Enviar o Pop-up de Erro
         await query.answer(
             f"Ops! Seu perfil ainda está incompleto. "
             f"Verifique se você adicionou uma foto PÚBLICA e tente novamente.\n\n"
@@ -171,20 +178,16 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
             show_alert=True
         )
 
-
 # --- ESTRUTURA DE INICIALIZAÇÃO CORRIGIDA ---
-
-# 1. Construir o Application (mas não inicializar ainda)
 application = (
     Application.builder()
     .token(TOKEN)
     .build()
 )
 
-# 2. Definir o "context manager" do FastAPI para lidar com o startup/shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- O QUE FAZER ANTES DO SERVIDOR LIGAR ---
+    # --- ANTES DO SERVIDOR LIGAR ---
     logger.info("Iniciando o bot...")
     # Registrar os handlers
     application.add_handler(ChatMemberHandler(
@@ -194,10 +197,9 @@ async def lifespan(app: FastAPI):
         handle_button_click, pattern="^verify_profile$"
     ))
     
-    # Chamar .initialize() - A CORREÇÃO DO ERRO
     await application.initialize()
     
-    # Definir o webhook
+    # CORREÇÃO: Adicionando allowed_updates
     webhook_endpoint = f"{WEBHOOK_URL}/webhook"
     logger.info(f"Definindo webhook para: {webhook_endpoint}")
     await application.bot.set_webhook(
@@ -206,32 +208,30 @@ async def lifespan(app: FastAPI):
     )
     
     logger.info("--- Servidor do Bot iniciado e pronto ---")
-    yield # Isso é o ponto em que o servidor fica rodando
+    yield
     
-    # --- O QUE FAZER QUANDO O SERVIDOR DESLIGAR ---
+    # --- QUANDO O SERVIDOR DESLIGAR ---
     logger.info("Desligando o bot...")
-    await application.bot.delete_webhook() # Limpa o webhook
-    await application.shutdown() # Desliga o bot corretamente
+    await application.bot.delete_webhook()
+    await application.shutdown()
 
-# 3. Inicializar o FastAPI com o novo lifespan
 app = FastAPI(lifespan=lifespan)
 
-# 4. Definir o endpoint do webhook
 @app.post("/webhook")
 async def webhook(request: Request):
     """O endpoint que o Telegram chama."""
     try:
         data = await request.json()
-        update = Update.de_json(data, application.bot)
         
-        # Agora esta chamada vai funcionar
+        # --- NOSSO NOVO LOG DE DEPURAÇÃO ---
+        # Vamos logar o JSON inteiro para ver o que estamos recebendo
+        logger.info(f"DADOS DO WEBHOOK RECEBIDOS: {data}")
+        # --- FIM DO LOG DE DEPURAÇÃO ---
+
+        update = Update.de_json(data, application.bot)
         await application.process_update(update)
         
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Erro no endpoint do webhook: {e}")
-        # Retorna 200 OK para o Telegram não ficar reenviando
         return {"status": "error_logged"}, 200
-
-# 5. O Render vai usar o Start Command para iniciar o Uvicorn
-#    Portanto, o 'if __name__ == "__main__":' não é mais necessário aqui
