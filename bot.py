@@ -75,10 +75,12 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # IMPORTANTE: Adicionamos um log aqui
     logger.info(f"HANDLE_NEW_MEMBER ATIVADO para usuário: {update.chat_member.new_chat_member.user.id}")
     
-    if not (update.chat_member and 
-            update.chat_member.new_chat_member.status == ChatMember.MEMBER):
-        logger.warn("Evento de chat_member não era um novo membro 'MEMBER'. Ignorando.")
-        return
+    if not (update.chat_member and
+        update.chat_member.old_chat_member.is_member == False and
+        update.chat_member.new_chat_member.is_member == True):
+    
+       logger.info("Evento de ChatMember não foi uma 'ENTRADA' (is_member: False -> True). Ignorando.")
+       return
 
     user = update.chat_member.new_chat_member.user
     chat = update.chat
