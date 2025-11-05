@@ -26,7 +26,6 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "impedirei")
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-# Alteramos o nome do logger para 'bot' para corresponder ao Start Command
 logger = logging.getLogger("bot")
 logger.setLevel(logging.INFO)
 
@@ -72,20 +71,20 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Disparado quando um novo membro entra no chat.
     """
-    # IMPORTANTE: Adicionamos um log aqui
     logger.info(f"HANDLE_NEW_MEMBER ATIVADO para usuário: {update.chat_member.new_chat_member.user.id}")
     
+    # Verifica se é um evento de "ENTRADA"
     if not (update.chat_member and
-        update.chat_member.old_chat_member.is_member == False and
-        update.chat_member.new_chat_member.is_member == True):
-    
-       logger.info("Evento de ChatMember não foi uma 'ENTRADA' (is_member: False -> True). Ignorando.")
-       return
+            update.chat_member.old_chat_member.is_member == False and
+            update.chat_member.new_chat_member.is_member == True):
+        
+        logger.info("Evento de ChatMember não foi uma 'ENTRADA' (is_member: False -> True). Ignorando.")
+        return
 
     user = update.chat_member.new_chat_member.user
-    chat = update.chat_member.chat
+    chat = update.chat_member.chat # Corrigido
     bot = context.bot
-    logger.info(f"Novo membro {user.first_name} ({user.id}) no chat {chat.id}")
+    logger.info(f"Novo membro {user.first_name} ({user.id}) entrou no chat {chat.id}")
 
     is_valid, reason_text = await check_user_profile(user.id, chat.id, bot)
 
@@ -99,12 +98,24 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Calcular o tempo de mute (SUA MODIFICAÇÃO)
     until_date = int(time.time()) + 9999999 
     
-    # 2. Definir as permissões de MUTE
+    # --- CORREÇÃO DO 'TypeError' ---
+    # 2. Definir as permissões de MUTE (com os parâmetros corretos da v20+)
     permissions = ChatPermissions(
-        can_send_messages=False, can_send_media_messages=False, can_send_polls=False,
-        can_send_other_messages=False, can_add_web_page_previews=False,
-        can_change_info=False, can_invite_users=False, can_pin_messages=False
+        can_send_messages=False,
+        can_send_audios=False,
+        can_send_documents=False,
+        can_send_photos=False,
+        can_send_videos=False,
+        can_send_video_notes=False,
+        can_send_voice_notes=False,
+        can_send_polls=False,
+        can_send_other_messages=False,
+        can_add_web_page_previews=False,
+        can_change_info=False,
+        can_invite_users=False,
+        can_pin_messages=False
     )
+    # --- FIM DA CORREÇÃO ---
     
     # 3. Executar o Mute
     try:
@@ -141,7 +152,6 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
     """
     Disparado quando o usuário clica em "verify_profile".
     """
-    # IMPORTANTE: Adicionamos um log aqui
     logger.info(f"HANDLE_BUTTON_CLICK ATIVADO por: {update.callback_query.from_user.id}")
 
     query = update.callback_query
@@ -154,13 +164,26 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
     if is_valid:
         # --- APROVADO ---
         logger.info(f"Usuário {user.id} aprovado na RE-verificação. Desmutando.")
+        
+        # --- CORREÇÃO DO 'TypeError' ---
+        # 2. Desmutar (com os parâmetros corretos da v20+)
         permissions = ChatPermissions(
-            can_send_messages=True, can_send_media_messages=True, can_send_polls=True,
-            can_send_other_messages=True, can_add_web_page_previews=True,
+            can_send_messages=True,
+            can_send_audios=True,
+            can_send_documents=True,
+            can_send_photos=True,
+            can_send_videos=True,
+            can_send_video_notes=True,
+            can_send_voice_notes=True,
+            can_send_polls=True,
+            can_send_other_messages=True,
+            can_add_web_page_previews=True,
             can_invite_users=True,
         )
+        # --- FIM DA CORREÇÃO ---
+        
         await bot.restrict_chat_member(
-            chat_id=chat.id, user_id=user.id, permissions=permissions
+            chat_id=chat_id, user_id=user.id, permissions=permissions
         )
         await query.answer(
             "✅ Perfil verificado! Seu acesso foi liberado.", 
@@ -179,6 +202,7 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"Em caso de engano, contate @{ADMIN_USERNAME}",
             show_alert=True
         )
+
 
 # --- ESTRUTURA DE INICIALIZAÇÃO CORRIGIDA ---
 application = (
@@ -224,12 +248,7 @@ async def webhook(request: Request):
     """O endpoint que o Telegram chama."""
     try:
         data = await request.json()
-        
-        # --- NOSSO NOVO LOG DE DEPURAÇÃO ---
-        # Vamos logar o JSON inteiro para ver o que estamos recebendo
         logger.info(f"DADOS DO WEBHOOK RECEBIDOS: {data}")
-        # --- FIM DO LOG DE DEPURAÇÃO ---
-
         update = Update.de_json(data, application.bot)
         await application.process_update(update)
         
